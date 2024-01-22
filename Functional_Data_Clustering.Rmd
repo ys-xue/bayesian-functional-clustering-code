@@ -1,0 +1,606 @@
+---
+title: 'Supplemental for Bayesian Functional Clustering'
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  bookdown::html_document2:
+    includes:
+      in_header: header.html
+---
+
+<style>
+.fold-btn { 
+  float: right; 
+  margin: 5px 5px 0 0;
+}
+.fold { 
+  border: 1px solid black;
+  min-height: 40px;
+}
+</style>
+
+<script type="text/javascript">
+$(document).ready(function() {
+  $folds = $(".fold");
+  $folds.wrapInner("<div class=\"fold-blck\">"); // wrap a div container around content
+  $folds.prepend("<button class=\"fold-btn\">Unfold</button>");  // add a button
+  $(".fold-blck").toggle();  // fold all blocks
+  $(".fold-btn").on("click", function() {  // add onClick event
+    $(this).text($(this).text() === "Fold" ? "Unfold" : "Fold");  // if the text equals "Fold", change it to "Unfold"or else to "Fold" 
+    $(this).next(".fold-blck").toggle("linear");  // "swing" is the default easing function. This can be further customized in its speed or the overall animation itself.
+  })
+});
+</script>
+
+```{r setup, include=FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+ipak <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+        install.packages(new.pkg, dependencies = TRUE)
+    sapply(pkg, require, character.only = TRUE, quietly = TRUE)
+    invisible(NULL)
+}
+ipak(c("pracma", "ineq", "fdasrvf", "tidyverse" ,"REAT", "usmap",
+       "DT", "data.table", "furrr", "parallel", "future"))
+```
+
+This document replicates figures and tables for both simulation study and
+real data analysis results in the manuscript
+**Bayesian Spatial Homogeneity Pursuit of Functional Data: an Application to
+the U.S. Income Distribution**.
+
+# Replication for Figures
+
+Figures 1-5 and 7-9 are replicated in this section.
+
+
+(ref:lorenzdata) (a) Lorenz curve calculated based on PUMS 2017 Household Income
+data on the national level and for two selected states; (b) Lorenz curves for
+all U.S. states.
+
+
+```{r fig.align='center', fig.width=8, fig.height=4.5, fig.cap="(ref:lorenzdata)"}
+load("income_data.Rdata")
+source("./MFM_code_norm_diag.R")
+source("./helpers.R")
+
+par(mfrow = c(1,2))
+lorenz(data$data.HINCP,  bg.col = "white", lctitle = "(a)")
+## Utah
+lorenz(data$data.HINCP[data$data.ST == 49], lctitle = "", bg.col = "white",
+       lc.col =  "#E69F00", add.lc = TRUE, ltype = "dashed")
+## New York
+lorenz(data$data.HINCP[data$data.ST == 36], lctitle = "", bg.col = "white",
+       lc.col = "#56B4E9", add.lc = TRUE, ltype = "longdash")
+legend(0, 1, legend = c("National", "Utah", "New York"),
+       col = c("black", "#E69F00", "#56B4E9"),
+       lty = c("solid", "dashed", "longdash"))
+
+lorenz(data$data.HINCP, lctitle = "(b)", bg.col = "white")
+for (i in unique(data$data.ST)) {
+  lorenz(data$data.HINCP[data$data.ST == i], lctitle = "", bg.col = "white",
+         lc.col =  "grey", add.lc = TRUE, ltype = "dashed")
+}
+lorenz(data$data.HINCP, lctitle = "", bg.col = "white", add.lc = TRUE)
+```
+
+```{r echo=FALSE}
+par(mfrow = c(1,1))
+```
+
+(ref:simdesign1) Illustration of the first simulation design with three true
+clusters, with the first cluster having two disjoint components.
+
+```{r fig.align='center', fig.cap = "(ref:simdesign1)"}
+cbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
+               "#0072B2", "#D55E00", "#CC79A7")
+stateinfo <- readRDS("state_fips_name.rds")
+c1 <- c("AK", "HI", "CA", "OR", "WA", "ID", "NV", "AZ", "UT", "MT",
+        "WY", "ME", "NH", "VT", "NY", "CT", "MA", "RI", "PA", "DE",
+        "DC", "MD", "VA", "NC", "WV", "NJ", "SC", "OH")
+c2 <- c("ND", "SD", "MN", "IA", "WI", "MI", "IL", "IN", "MO", "KS",
+        "NE", "CO")
+c3 <-  setdiff(stateinfo$abbr, c(c1, c2))
+stateinfo$cluster <- as.factor(1 * (stateinfo$abbr %in% c1) + 
+  2 * (stateinfo$abbr %in% c2))
+plot_usmap(data = stateinfo, values = "cluster", labels = TRUE) +
+  scale_fill_manual(values = cbPalette, name = "Cluster")
+```
+
+(ref:simdesign2) Illustration of the second simulation design with three
+clusters.
+
+```{r fig.align='center', fig.cap = "(ref:simdesign2)"}
+c1 <- c("CA", "WA", "OR", "NV", "AZ", "UT", "ID", "MT", "WY", "CO",
+        "TX", "OK", "KS", "NM", "AK", "HI", "NE")
+c2 <- c("ND", "SD", "MN", "IA", "MO", "AR", "LA", "MS", "AL", "TN",
+        "KY", "IL", "WI", "MI", "IN", "GA", "FL")
+c3 <- c("OH", "SC", "NC", "WV", "VA", "MD", "DC", "PA", "DE",
+        "NJ", "NY", "CT", "RI", "MA", "NH", "ME", "VT")
+stateinfo$cluster <- as.factor(1 * (stateinfo$abbr %in% c1) + 
+  2 * (stateinfo$abbr %in% c2) + 3 * (stateinfo$abbr %in% c3))
+plot_usmap(data = stateinfo, values = "cluster", labels = TRUE) +
+  scale_fill_manual(values = cbPalette, name = "Cluster")
+```
+
+
+(ref:histgini) Histogram of Gini indices for statewise income data (5,100 in
+each panel from 100 replicates) for weak and strong signals for the two true cluster designs.
+
+```{r fig.align='center', fig.cap="(ref:histgini)", message=FALSE,fig.height=3.5, fig.width=7, results = "hide"}
+
+
+N_SIMU_REPS <- 2
+N_MAX_ITER <- 500
+N_STATES <- 51
+
+#### design 1
+
+c1 <- c("AK", "HI", "CA", "OR", "WA", "ID", "NV", "AZ", "UT", "MT",
+        "WY", "ME", "NH", "VT", "NY", "CT", "MA", "RI", "PA", "DE",
+        "DC", "MD", "VA", "NC", "WV", "NJ", "SC", "OH")
+c2 <- c("ND", "SD", "MN", "IA", "WI", "MI", "IL", "IN", "MO", "KS", "NE", "CO")
+c3 <-  setdiff(stateinfo$abbr, c(c1, c2))
+
+
+cc1 <- which(stateinfo$abbr %in% c1)
+cc2 <- which(stateinfo$abbr %in% c2)
+cc3 <- which(stateinfo$abbr %in% c3)
+
+IND1 <- 1 * (stateinfo$abbr %in% c1) + 2 * (stateinfo$abbr %in% c2) + 
+  3 * (stateinfo$abbr %in% c3)
+
+
+design1weak <- purrr::map(1:N_SIMU_REPS, ~genData(.x, 0.1, "weak")) 
+design1weakGini <- map_dfc(design1weak, ~.x$gini)
+
+design1strong <- purrr::map(1:N_SIMU_REPS, ~genData(.x, 0.1, "strong"))
+design1strongGini <- map_dfc(design1strong, ~.x$gini)
+
+design1weakGini$Cluster <- design1strongGini$Cluster <- factor(IND1)
+
+rm(cc1, cc2, cc3, c1, c2, c3, IND)
+#### design 2
+
+c1 <- c("CA", "WA", "OR", "NV", "AZ", "UT", "ID", "MT", "WY", "CO",
+        "TX", "OK", "KS", "NM", "AK", "HI", "NE")
+
+c2 <- c("ND", "SD", "MN", "IA", "MO", "AR", "LA", "MS", "AL", "TN",
+        "KY", "IL", "WI", "MI", "IN", "GA", "FL")
+
+c3 <- c("OH", "SC", "NC", "WV", "VA", "MD", "DC", "PA", "DE",
+        "NJ", "NY", "CT", "RI", "MA", "NH", "ME", "VT")
+
+
+
+cc1 <- which(stateinfo$abbr %in% c1)
+cc2 <- which(stateinfo$abbr %in% c2)
+cc3 <- which(stateinfo$abbr %in% c3)
+
+IND2 <- 1 * (stateinfo$abbr %in% c1) + 2 * (stateinfo$abbr %in% c2) + 
+  3 * (stateinfo$abbr %in% c3)
+
+
+design2weak <- purrr::map(1:N_SIMU_REPS, ~genData(.x, 0.1, "weak")) 
+design2weakGini <- map_dfc(design2weak, ~.x$gini)
+
+design2strong <- purrr::map(1:N_SIMU_REPS, ~genData(.x, 0.1, "strong"))
+design2strongGini <- map_dfc(design2strong, ~.x$gini)
+
+
+design2weakGini$Cluster <- design2strongGini$Cluster <- factor(IND2)
+
+
+
+dataList <- list(design1weakGini, design1strongGini,
+                 design2weakGini, design2strongGini)
+dataList <- map(dataList, ~reshape2::melt(.x, id.vars = "Cluster"))
+
+
+df <- plyr::ldply(dataList, data.frame) %>%
+  dplyr::select(value, Cluster) %>% mutate(Setting = rep(c(1,2), each = N_STATES * N_SIMU_REPS * 2)) %>%
+  mutate(Signal = rep( rep(c("Weak", "Strong"), each = N_STATES * N_SIMU_REPS), 2)) %>%
+  mutate(Setting = paste0("Design ", Setting)) %>%
+  mutate(Signal = factor(Signal, levels = c("Weak",  "Strong")))
+
+df %>% ggplot(aes(x = value)) + geom_histogram(col = "black", fill = "white") + 
+  facet_grid(Setting ~ Signal, scales = "free_x") + theme_bw() + ylab("Count") +
+  xlab("Value of Gini index")
+```
+
+
+
+
+```{r echo=FALSE, message=FALSE, results='hide', warning = FALSE, message = FALSE}
+
+distance <- readRDS("./USgdist.rds")
+distance[distance > 1000] <- 10000
+
+c1 <- c("AK", "HI", "CA", "OR", "WA", "ID", "NV", "AZ", "UT", "MT",
+        "WY", "ME", "NH", "VT", "NY", "CT", "MA", "RI", "PA", "DE",
+        "DC", "MD", "VA", "NC", "WV", "NJ", "SC", "OH")
+c2 <- c("ND", "SD", "MN", "IA", "WI", "MI", "IL", "IN", "MO", "KS", "NE", "CO")
+c3 <-  setdiff(stateinfo$abbr, c(c1, c2))
+
+
+cc1 <- which(stateinfo$abbr %in% c1)
+cc2 <- which(stateinfo$abbr %in% c2)
+cc3 <- which(stateinfo$abbr %in% c3)
+
+IND1 <- 1 * (stateinfo$abbr %in% c1) + 2 * (stateinfo$abbr %in% c2) + 
+  3 * (stateinfo$abbr %in% c3)
+
+
+sim1 <- function(seed, strength = c("weak", "strong")) {
+  set.seed(seed)
+  dataset <- genData(seed, 0.1, signal = strength)
+  inner_prod_matrix <- dataset$inner_prod_matrix
+  n <- nrow(inner_prod_matrix)
+  A <- log((inner_prod_matrix - min(inner_prod_matrix)) / (max(inner_prod_matrix) -
+                                                          inner_prod_matrix))
+  A[which(A == Inf)]  <- max(A[which(is.finite(A) == T)])
+  A[which(A == -Inf)] <- min(A[which(is.finite(A) == T)])
+  AAA <- A; AAA[lower.tri(AAA)] <- 0
+  
+  fit1 <- CDMFM(data = A, data1 = AAA, lambda1 = 0.5, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit2 <- CDMFM(data = A, data1 = AAA, lambda1 = 1, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit3 <- CDMFM(data = A, data1 = AAA, lambda1 = 1.5, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit4 <- CDMFM(data = A, data1 = AAA, lambda1 = 2, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit5 <- CDMFM(data = A, data1 = AAA, lambda1 = 0, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  return(list(fit1 = fit1, fit2 = fit2, fit3 = fit3, fit4 = fit4, fit5 = fit5,
+            srvf = dataset$srvf))
+}
+
+
+plan(multisession(workers = detectCores() - 1))
+## .progress = TRUE will only print progress bars when code in this file is
+## executed in interactive mode
+design1weakResult <- future_map(1:N_SIMU_REPS, ~sim1(.x, strength = "weak"),
+                                .progress = TRUE)
+design1weakSummary <- summary_output1(design1weakResult)
+
+design1strongResult <- future_map(1:N_SIMU_REPS, ~sim1(.x, strength = "strong"),
+                                  .progress = TRUE)
+design1strongSummary <- summary_output1(design1strongResult)
+
+
+#########################################################################
+#########################################################################
+
+c1 <- c("CA", "WA", "OR", "NV", "AZ", "UT", "ID", "MT", "WY", "CO",
+        "TX", "OK", "KS", "NM", "AK", "HI", "NE")
+
+c2 <- c("ND", "SD", "MN", "IA", "MO", "AR", "LA", "MS", "AL", "TN",
+        "KY", "IL", "WI", "MI", "IN", "GA", "FL")
+
+c3 <- c("OH", "SC", "NC", "WV", "VA", "MD", "DC", "PA", "DE",
+        "NJ", "NY", "CT", "RI", "MA", "NH", "ME", "VT")
+
+
+
+cc1 <- which(stateinfo$abbr %in% c1)
+cc2 <- which(stateinfo$abbr %in% c2)
+cc3 <- which(stateinfo$abbr %in% c3)
+
+IND2 <- 1 * (stateinfo$abbr %in% c1) + 2 * (stateinfo$abbr %in% c2) + 
+  3 * (stateinfo$abbr %in% c3)
+
+sim2 <- function(seed, strength = c("weak", "strong")) {
+  set.seed(seed)
+  dataset <- genData(seed, 0.1, signal = strength)
+  inner_prod_matrix <- dataset$inner_prod_matrix
+  n <- nrow(inner_prod_matrix)
+  A <- log((inner_prod_matrix - min(inner_prod_matrix)) / (max(inner_prod_matrix) -
+                                                          inner_prod_matrix))
+  A[which(A == Inf)]  <- max(A[which(is.finite(A) == T)])
+  A[which(A == -Inf)] <- min(A[which(is.finite(A) == T)])
+  AAA <- A; AAA[lower.tri(AAA)] <- 0
+  
+  fit1 <- CDMFM(data = A, data1 = AAA, lambda1 = 1.5, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = N_MAX_ITER, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit2 <- CDMFM(data = A, data1 = AAA, lambda1 = 2, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit3 <- CDMFM(data = A, data1 = AAA, lambda1 = 2.5, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit4 <- CDMFM(data = A, data1 = AAA, lambda1 = 3, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  fit5 <- CDMFM(data = A, data1 = AAA, lambda1 = 0, neighbour = 3,
+                    distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+                    mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+                    LAMBDA = 1, initNClusters = 9)
+  return(list(fit1 = fit1, fit2 = fit2, fit3 = fit3, fit4 = fit4, fit5 = fit5,
+            srvf = dataset$srvf))
+}
+
+design2weakResult <- future_map(1:N_SIMU_REPS, ~sim2(.x, "weak"),
+                                .progress = TRUE)
+design2weakSummary <- summary_output2(design2weakResult)
+
+design2strongResult <- future_map(1:N_SIMU_REPS, ~sim2(.x, "strong"),
+                                  .progress = TRUE)
+design2strongSummary <- summary_output2(design2strongResult)
+
+p1data <- rbind(design1weakSummary$finalK, design1strongSummary$finalK) %>%
+  mutate(Signal = rep(c("Weak", "Strong"), each = 5 * N_SIMU_REPS))
+p1data$Signal <-  factor(p1data$Signal, levels = c("Weak", "Strong"),
+                         labels = c("Weak", "Strong"))
+p1 <- p1data %>% ggplot(aes(x = count)) + 
+  geom_histogram(binwidth = 0.5, fill = "white", col = "black") + 
+  facet_grid(Signal ~ smooth, labeller = label_parsed) + theme_bw() +
+  theme(text = element_text(size = 16)) +  xlim(c(0, 6)) + 
+  xlab("Number of Clusters") + ggtitle("(a) Design 1")
+
+
+p2data <- rbind(design2weakSummary$finalK, design2strongSummary$finalK) %>%
+  mutate(Signal = rep(c("Weak", "Strong"), each = 5 * N_SIMU_REPS))
+p2data$Signal <-  factor(p2data$Signal, levels = c("Weak", "Strong"),
+                         labels = c("Weak", "Strong"))
+p2 <- p2data %>% ggplot(aes(x = count)) + 
+  geom_histogram(binwidth = 0.5, fill = "white", col = "black") + 
+  facet_grid(Signal ~ smooth, labeller = label_parsed) + theme_bw() +
+  theme(text = element_text(size = 16)) +  xlim(c(0, 6)) + 
+  xlab("Number of Clusters") + ggtitle("(b) Design 2")
+```
+
+
+(ref:Khistlorenz) Histogram of number of clusters inferred by the proposed
+method using Lorenz curves for each state under the two designs with two signal strengths.
+
+```{r fig.align='center', fig.cap="(ref:Khistlorenz)", message=FALSE,fig.height=7,fig.width = 8, results="hide"}
+gridExtra::grid.arrange(p1, p2, ncol = 1)
+```
+
+
+(ref:realdatadesc)  Descriptive statistics for PUMS data, visualized on US
+map: (a) Gini coeﬃcient; (b) state median income.
+
+```{r fig.align = 'center', fig.cap="(ref:realdatadesc)", message=FALSE,fig.height = 10, fig.width = 7.5}
+index <- unique(data$data.ST)
+medincome <- map_dbl(index, ~median(data$data.HINCP[data$data.ST == .x]))
+Gini_coefficient <- rep(0, length(index))
+for (i in seq_along(index)) {
+  Gini_coefficient[i] = Gini(data$data.HINCP[data$data.ST == index[i]])
+}
+stateinfo <- stateinfo %>% mutate(fips = as.numeric(fips)) %>%
+  mutate(Gini = Gini_coefficient) %>%
+  mutate(medincome = medincome)
+
+gini <- plot_usmap(data = stateinfo, value = "Gini", labels = TRUE) +
+  scale_fill_continuous(low = "white", high = "#004D40", name = "Gini coefficient") +
+  ggtitle("(a)")
+
+income <- plot_usmap(data = stateinfo, value = "medincome", labels = TRUE) +
+  scale_fill_continuous(low = "white", high = "#004D40", name = "Median income") +
+  ggtitle("(b)")
+gridExtra::grid.arrange(gini, income, ncol = 1)
+```
+
+
+
+
+(ref:realdatacluster) Illustration of three clusters identiﬁed by the proposed
+method for 51 states.
+
+
+
+```{r fig.align='center', fig.cap = "(ref:realdatacluster)", message = FALSE, fig.height = 5, fig.width=7.5}
+m <- length(index)
+lorenzcurve <- matrix(0, 1000, m)
+for (i in seq_along(index)) {
+  lorenzcurve[, i] <-
+    quantile(Lc(data$data.HINCP[data$data.ST == index[i]])$L, seq(0.001, 1, by =
+                                                                    0.001))
+}
+
+stateinfo <- stateinfo %>% mutate(fips = as.numeric(fips)) %>%
+  mutate(Gini = Gini_coefficient)
+
+
+srsf <- f_to_srvf(lorenzcurve, seq(0.001, 1, by = 0.001))
+
+inner_prod_matrix <- matrix(0, m, m)
+for (i in 1:m) {
+  for (j in 1:m) {
+    inner_prod_matrix[i, j] = trapz(seq(0.001, 1, by = 0.001), srsf[, i] * srsf[, j])
+  }
+}
+
+n <- 51
+A <- log((inner_prod_matrix - min(inner_prod_matrix)) / (max(inner_prod_matrix) -
+                                                           inner_prod_matrix))
+A[which(A == Inf)] = max(A[which(is.finite(A) == T)])
+A[which(A == -Inf)] = min(A[which(is.finite(A) == T)])
+AAA <- A; AAA[lower.tri(AAA)] <- 0
+
+set.seed(100)
+clusFit <-  CDMFM(data = A, data1 = AAA, lambda1 = 3, neighbour = 3,
+            distance = distance, niterations = N_MAX_ITER, mu_0 = max(A),
+            mu_0off = min(A), t_0 = 2, alpha = 1, beta = 1, GAMMA = 1,
+            LAMBDA = 1, initNClusters = 9)
+finalClusers <- getDahl(clusFit, 200)
+stateinfo$cluster <- as.factor(finalClusers$zout)
+
+plot_usmap(data = stateinfo, values = "cluster", labels = TRUE) + 
+  scale_fill_manual(values = cbPalette, name = "Cluster")
+```
+
+(ref:realdatalorenz) Average Lorenz curves for states in the three identiﬁed
+clusters.
+
+
+```{r fig.align='center', fig.cap = "(ref:realdatacluster)", message = FALSE, fig.height = 5, fig.width=7.5}
+results <- finalClusers$zout
+temp1 <- rowMeans(lorenzcurve[, which(results == 1)])
+temp2 <- rowMeans(lorenzcurve[, which(results == 2)])
+temp3 <- rowMeans(lorenzcurve[, which(results == 3)])
+temp4 <- rowMeans(lorenzcurve[, which(results == 4), drop = FALSE])
+
+segment_data <- data.frame(x = 0, xend = 1, y = 0, yend = 1)
+
+toplot <- data.frame(value = c(temp1, temp2, temp3, temp4), 
+                     Cluster = rep(c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"),
+                                   each = 1000),
+                     x = rep(1:1000, 4)/1000)
+
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442",
+               "#0072B2", "#D55E00", "#CC79A7")
+
+
+(toplot %>% ggplot(aes(x = x, y = value, group = Cluster, col = Cluster, lty = Cluster)) +
+  geom_line() + theme_bw() + 
+  theme(panel.grid = element_blank()) + 
+  xlab("% of objects") + ylab("% of regarded variable") +
+  scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  geom_segment(data = segment_data, aes(x = x, y = y, xend = xend, yend = yend), color = "blue",
+                inherit.aes = FALSE) + 
+  theme(legend.position = c(0.15, 0.8),
+        legend.background = element_rect(color = 'black', fill = 'white', linetype = 'solid')) +
+  coord_fixed() + theme(text = element_text(size = 16)) + 
+  scale_color_manual(values = cbPalette) )
+
+```
+
+
+# Replication for Table 2
+
+Table 2 (performance comparison) is replicated in this section.
+
+```{r message = FALSE, warning = FALSE, results = "hide"}
+### Kmeans
+
+weak1final <- which.max(design1weakSummary$correctK) - 1
+weak1 <- design1weakSummary$finalK$count[(N_SIMU_REPS * weak1final + 1):(N_SIMU_REPS * weak1final + N_SIMU_REPS)]
+Kmeans.weak1 <- purrr::map(1:N_SIMU_REPS,  .f = function(x) {
+  set.seed(x)
+  temp <- kmeans(t(design1weak[[x]]$srvf),
+                 centers = weak1[x])
+  return(temp$cluster)
+})
+RIweak1 <- mean(map_dbl(Kmeans.weak1, ~fossil::rand.index(.x, IND1)))
+
+strong1final <- which.max(design1strongSummary$correctK) - 1
+strong1 <- design1strongSummary$finalK$count[(N_SIMU_REPS * strong1final + 1):(N_SIMU_REPS * strong1final + N_SIMU_REPS)]
+Kmeans.strong1 <- purrr::map(1:N_SIMU_REPS,  .f = function(x) {
+  set.seed(x)
+  temp <- kmeans(t(design1strong[[x]]$srvf),
+                 centers = strong1[x])
+  return(temp$cluster)
+})
+RIstrong1 <- mean(map_dbl(Kmeans.strong1, ~fossil::rand.index(.x, IND1)))
+
+weak2final <- which.max(design2weakSummary$correctK) - 1
+weak2 <- design2weakSummary$finalK$count[(N_SIMU_REPS * weak2final + 1):(N_SIMU_REPS * weak2final + N_SIMU_REPS)]
+Kmeans.weak2 <- purrr::map(1:N_SIMU_REPS,  .f = function(x) {
+  set.seed(x)
+  temp <- kmeans(t(design2weak[[x]]$srvf),
+                 centers = weak2[x])
+  return(temp$cluster)
+})
+RIweak2 <- mean(map_dbl(Kmeans.weak2, ~fossil::rand.index(.x, IND2)))
+
+strong2final <- which.max(design2strongSummary$correctK) - 1
+strong2 <- design2strongSummary$finalK$count[(N_SIMU_REPS * strong2final + 1):(N_SIMU_REPS * strong2final + N_SIMU_REPS)]
+Kmeans.strong2 <- purrr::map(1:N_SIMU_REPS,  .f = function(x) {
+  set.seed(x)
+  temp <- kmeans(t(design2strong[[x]]$srvf),
+                 centers = strong2[x])
+  return(temp$cluster)
+})
+RIstrong2 <- mean(map_dbl(Kmeans.strong2, ~fossil::rand.index(.x, IND2)))
+
+### funcy
+
+#################################################################################
+#################################################################################
+
+library(funcy)
+
+results1weak <- list()
+for (i in 1:N_SIMU_REPS) {
+  if (weak1[i] > 1) {
+    temp <- funcit(design1weak[[i]]$lorenzcurve, weak1[i], method = "fitfclust", seed = i)
+    results1weak[[i]] <- Cluster(temp)
+  } else {
+    results1weak[[i]] <- rep(1, 51)
+  }
+}
+
+fcweak1 <- mean(map_dbl(results1weak, ~fossil::rand.index(.x, IND1)))
+
+results1strong <- list()
+for (i in 1:N_SIMU_REPS) {
+  if (strong1[i] > 1) {
+    temp <- funcit(design1strong[[i]]$lorenzcurve, strong1[i], method = "fitfclust", seed = i)
+    results1strong[[i]] <- Cluster(temp)
+  } else {
+    results1strong[[i]] <- rep(1, N_STATES)
+  }
+}
+
+fcstrong1 <- mean(map_dbl(results1strong, ~fossil::rand.index(.x, IND1)))
+
+
+results2weak <- list()
+for (i in 1:N_SIMU_REPS) {
+  if (weak2[i] > 1) {
+    temp <- funcit(design2weak[[i]]$lorenzcurve, weak2[i], method = "fitfclust", seed = i)
+    results2weak[[i]] <- Cluster(temp)
+  } else {
+    results2weak[[i]] <- rep(1, N_STATES)
+  }
+}
+
+fcweak2 <- mean(map_dbl(results2weak, ~ fossil::rand.index(.x, IND2)))
+ 
+results2strong <- list()
+for (i in 1:N_SIMU_REPS) {
+  if (strong2[i] > 1) {
+    temp <- funcit(design2strong[[i]]$lorenzcurve, strong2[i], method = "fitfclust", seed = i)
+    results2strong[[i]] <- Cluster(temp)
+  } else {
+    results2strong[[i]] <- rep(1, N_STATES)
+  }
+}
+
+fcstrong2 <- mean(map_dbl(results2strong, ~fossil::rand.index(.x, IND2)))
+
+output <- data.frame(rbind(
+  c(mean(design1weakSummary$RImeans[weak1final + 1]),
+    mean(design1strongSummary$RImeans[strong1final + 1]),
+    mean(design2weakSummary$RImeans[weak2final + 1]),
+    mean(design2strongSummary$RImeans[strong2final + 1])),
+  c(RIweak1, RIstrong1, RIweak2, RIstrong2),
+  c(fcweak1, fcstrong1, fcweak2, fcstrong2)
+))
+row.names(output) <- c("MRFC-MFM-fCluster", "K-means", "model-based")
+colnames(output) <- c("Design 1 weak", "Design1 strong", "Design 2 weak", "Design 2 strong")
+```
+
+```{r}
+knitr::kable(round(output, 3), booktabs = TRUE,
+             caption = 'Comparison of final clustering performance using average RI over 100 simulation replicates.')
+```
